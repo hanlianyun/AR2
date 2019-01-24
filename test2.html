@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0'>
+	<!-- 引入three.js库 及帧数查看组件 -->
+	<script src='vendor/three.js/build/three.js'></script>
+	<script src='vendor/three.js/examples/js/libs/stats.min.js'></script>
+	<!-- 引入jsartoolkit -->
+	<script src='../vendor/jsartoolkit5/build/artoolkit.min.js'></script>
+	<script src='../vendor/jsartoolkit5/js/artoolkit.api.js'></script>
+	<!-- 引入threex.artoolkit -->
+	<script src='../src/threex/threex-artoolkitsource.js'></script>
+	<script src='../src/threex/threex-artoolkitcontext.js'></script>
+	<script src='../src/threex/threex-artoolkitprofile.js'></script>
+	<script src='../src/threex/threex-arbasecontrols.js'></script>
+	<script src='../src/threex/threex-armarkercontrols.js'></script>
+	<script src='../src/threex/threex-arsmoothedcontrols.js'></script>
+	<!-- 引入JQ -->
+	<script src='vendor/js/jquery.min.1.7.js'></script>
+	<!-- 引入OBJ -->
+	<script src='vendor/js/MTLLoader.js'></script>
+	<script src='vendor/js/OBJLoader.js'></script>
+	<!-- 引入DIV -->
+	<script src="vendor/js/CSS2DRenderer.js"></script>
+	<script src="vendor/js/CSS3DRenderer.js"></script>
+	<!-- 操控模型 -->
+	<script src='vendor/js/OrbitControls.js'></script>
+	<script>THREEx.ArToolkitContext.baseURL = '../'</script>
+	<!-- 样式 -->
+	<style>
+		body {
+			margin: 0;
+			overflow: hidden;
+		}
+		
+		#css,
+		#webgl {
+			width: 100%;
+			height: 100%;
+			position: absolute;
+			top: 0;
+			left: 0;
+			/* z-index: -1;  */
+		}
+		
+		#css {
+		}
+		
+		#webgl {
+			pointer-events: none;
+		}
+		
+		.box {
+			width: 100vw;
+			height: 100vh;
+			position: absolute;
+			top: 0;
+			left: 0;
+			z-index: 9999999;
+		}
+		.box2 {
+			width: ,0vw;
+			height: 100vh;
+			position: absolute;
+			top: 0;
+			left: 0;
+			z-index: 9999999;
+		}
+		.test {
+			position: absolute;
+			top: 0;
+			left: 0;
+			font-size: 36px;
+			color: #fff;
+			z-index: 999999;
+		}
+		.div {
+			margin-top: 2em;
+		}
+	</style>
+</head>
+<body>
+	<!-- <div class="test">007</div> -->
+	<div class="box" id="box"></div>
+	<div class="box2" id="box2"></div>
+</body>
+<script>
+	// 模型变量
+	var camera, scene, scene1, renderer, renderer2, windowHalfX, windowHalfY, elementObj;
+	var mouseX = 0, mouseY = 0, tempX = 0, tempY = 0;
+	var windowHalfX = window.innerWidth / 2;
+	var windowHalfY = window.innerHeight / 2;
+	var controls, percentComplete;
+	var sphere, group, cubeobj, radiu;
+	var light, move = true;
+	var lookAt = new THREE.Vector3(0, 0, 0);
+	var lightMovementAmplitude = 200;
+	var mouse = new THREE.Vector2();
+	var tempmouse = new THREE.Vector2();
+	var raycaster = new THREE.Raycaster();
+	var cameraposition, cube = [], onetime = 0;
+
+	//init renderer（初始化渲染器）
+	var renderer = new THREE.WebGLRenderer({
+		alpha: true
+	});
+	renderer.setClearColor(new THREE.Color('lightgrey'), 0)
+	// renderer.setPixelRatio( 2 );
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.domElement.style.position = 'absolute'
+	renderer.domElement.style.zIndex = '-10'
+	renderer.domElement.style.top = '0px'
+	renderer.domElement.style.left = '0px'
+	document.body.appendChild( renderer.domElement );
+
+
+	//array of  functions for the rendering loop（渲染处理函数组初始化）
+	var onRenderFcts= [];
+
+	// init scene and camera
+	var scene	= new THREE.Scene();//初始化场景和环境
+
+	var ambient = new THREE.AmbientLight( 0x666666 );
+	scene.add( ambient );
+
+	var directionalLight = new THREE.DirectionalLight( 0x887766 );
+	directionalLight.position.set( -1, 1, 1 ).normalize();
+	scene.add( directionalLight );
+
+    //Initialize a basic camera
+    //Create a camera（初始化相机添加到场景）
+	//var camera = new THREE.Camera();
+	camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+	scene.add(camera);
+
+	//handle arToolkitSource（调用打开相机事件，由THREEx提供）
+	var arToolkitSource = new THREEx.ArToolkitSource({
+		sourceType : 'webcam',
+	})
+
+	arToolkitSource.init(function onReady(){
+		onResize()
+	})
+
+	//handle resize(处理重新调整大小后正常显示)
+	window.addEventListener('resize', function(){
+		onResize()
+	})
+	function onResize(){
+		arToolkitSource.onResizeElement()	
+		arToolkitSource.copyElementSizeTo(renderer.domElement)	
+		if( arToolkitContext.arController !== null ){
+			arToolkitSource.copyElementSizeTo(arToolkitContext.arController.canvas)	
+		}	
+	}
+
+	//初始化 ArcToolkit环境, 相机内部场景
+    //initialize arToolkitContext	
+
+	// create atToolkitContext
+	var arToolkitContext = new THREEx.ArToolkitContext({
+		//相机参数设置
+		cameraParametersUrl: THREEx.ArToolkitContext.baseURL + '../data/data/camera_para.dat',
+		detectionMode: 'mono',
+
+		canvasWidth: 80*3,
+		canvasHeight: 60*3,
+
+		maxDetectionRate: 30,//最大旋转角度还是什么滴
+	})
+	// initialize it
+	arToolkitContext.init(function onCompleted(){
+		// copy projection matrix to camera
+		camera.projectionMatrix.copy( arToolkitContext.getProjectionMatrix() );
+	})
+
+	// update artoolkit on every frame
+	onRenderFcts.push(function(){
+		if( arToolkitSource.ready === false )	return
+
+		arToolkitContext.update( arToolkitSource.domElement )
+	})
+	
+	//Create a ArMakerControls
+    //创建一个Ar标记
+	var markerRoot = new THREE.Group;//用threejs的点集合初始化。
+	scene.add(markerRoot);
+	var markerControls = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
+		type : 'pattern',
+		patternUrl : THREEx.ArToolkitContext.baseURL + 'examples/marker-training/examples/pattern-files/pattern-more.patt',
+	})
+	setTimeout(function () {
+		if (viewsuc == 0) {
+			markerControls = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
+				type : 'pattern',
+				patternUrl : THREEx.ArToolkitContext.baseURL + 'examples/marker-training/examples/pattern-files/pattern-hiro.patt',
+			})
+		}	
+	}, 1100)
+
+	// build a smoothedControls
+	// 建立一个平滑控制
+	var smoothedRoot = new THREE.Group()
+	scene.add(smoothedRoot)
+	var smoothedControls = new THREEx.ArSmoothedControls(smoothedRoot, {
+		lerpPosition: 0.4,
+		lerpQuaternion: 0.3,
+		lerpScale: 1,
+	})
+	onRenderFcts.push(function(delta){
+		smoothedControls.update(markerRoot)
+	})
+	//add Object in the scene
+    //添加物体
+	var arWorldRoot = smoothedRoot
+
+	// add a torus knot
+    //创建物体的重要步骤
+    var onProgress = function(xhr) {
+			if(xhr.lengthComputable) {
+				percentComplete = xhr.loaded / xhr.total * 100;
+				console.log(Math.round(percentComplete, 2) + '% downloaded');
+			}
+		};
+		var onError = function(xhr) {};
+
+		//点击之后的动画方法
+		function superanime(point) {
+			var flyright = setInterval(function() {
+				cube[point].position.x += 4;
+				if(cube[point].position.x >= 50) {
+					clearInterval(flyright);
+					cube[point].position.x = 51;
+				}
+			}, 5)
+			for(let temp = 0; temp < cube.length; temp++) {
+				if(cube[temp].position.x >= 50) {
+					onetime = temp;
+					console.log(onetime);
+				}
+			}
+			var back = setInterval(function() {
+				if(onetime < cube.length) {
+					cube[onetime].position.x -= 5;
+					if(cube[onetime].position.x <= 0) {
+						clearInterval(back);
+						cube[onetime].position.x = 0;
+					}
+				}
+			}, 5)
+			/*var drop = setInterval(function(){				
+				if(point+1 < cube.length && cube[point+1].position.y <= cube[point].position.y + 1 ){
+					clearInterval(drop);
+				} else if(point+1 >= cube.length){
+					clearInterval(drop);
+				}
+				for (let temp= point; temp < cube.length ; temp++ ) {
+					if(temp+1 >= cube.length){break;}
+					cube[temp+1].position.y -= 1;
+				}
+			},10);*/
+		}
+		//加载模型进场动画方法
+		function loadanime(point) {
+			var load = setInterval(function() {
+				if( point != cube.length ) {
+					cube[point].position.y -= 1;
+					if(cube[point].position.y <= 15 + point * 15) {
+						clearInterval(load);
+						cube[point].position.y = 15 + point * 15;
+						point++;
+					}
+				}
+			}, 5)					
+			if(point < cube.length ) {
+				setTimeout(function() {
+					loadanime(point);
+				}, 50)
+			}
+		}
+		//换皮肤方法
+		function changecolor(point){
+			let hex = 0xffff00;
+			cube[point].material.color.setHex(hex);			
+		}
+		
+		function myinit() {
+			//scene	= new THREE.Scene();//初始化场景和环境
+			//监听器
+			document.addEventListener('mouseup', function() {
+				move = true;
+				addtext();
+			}, false);
+			document.addEventListener('touchstart', function() {
+				move = false;
+			}, false);
+			document.addEventListener('mouseover', function() {
+				move = false;
+			}, false);
+			document.addEventListener('mouseout', function() {
+				move = true;
+			}, false);
+			document.addEventListener('touchend', function() {
+				move = true;
+			}, false);
+			document.addEventListener('mousedown', function() {
+				tempX = event.clientX;
+				tempY = event.clientY;
+				tempmouse = new THREE.Vector2(tempX, tempY);
+			}, false);
+			
+			windowHalfX = window.innerWidth / 2;
+			windowHalfY = window.innerHeight / 2;
+			//摄像机
+			camera1 = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+			camera1.position.set(0, 150, 150);
+			scene1 = new THREE.Scene();
+			group = new THREE.Group();
+			//scene.add(group);
+			function addcube(point) {
+				let geometry = new THREE.BoxGeometry(10, 10, 0.01);
+				let material = new THREE.MeshLambertMaterial({
+					color: 0xff0000,
+					vertexColors: THREE.FaceColors,
+					overdraw: 0.5
+				});
+			}
+			//点击之后添加文字
+			function addtext() {
+				var point;
+				//通过鼠标点击的位置计算出raycaster所需要的点的位置，以屏幕中心为原点，值的范围为-1到1.
+				mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+				mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+				//通过鼠标点的位置和当前相机的矩阵计算出raycaster
+				if(tempmouse.x == event.clientX && tempmouse.y == event.clientY) {
+					raycaster.setFromCamera(mouse, camera);
+					// 获取raycaster直线和所有模型相交的数组集合
+					var intersects = raycaster.intersectObjects(scene.children);
+					//线
+					//console.log(intersects[0]);
+					if(intersects[0] && intersects[0].object.receiveShadow == false) {
+						point = intersects[0].object.name
+						var geometry = new THREE.Geometry();
+						var material = new THREE.MeshBasicMaterial({
+							vertexColors: true
+						});
+						var color1 = new THREE.Color(0xFF0000);
+						var color2 = new THREE.Color(0xFF0000);
+						geometry.colors.push(color1, color2);
+						if(cube[point].children.length != 0) {
+							/*if(onetime == 5){*/
+							superanime(point);
+							/*} else {
+								returnanime(point);
+							}*/
+						} else if(cube[point].children.length == 0) {
+							//console.log('第' + point + '个方块');
+							//console.log($('.div').eq(point).text() == '第' + point + '个方块');
+							elementObj = makeElementObject('div', 100, 100);
+							//文字
+							var pointNum = point + 1;
+							elementObj.css2dObject.element.textContent = '第' + pointNum + '个方块' //div文字
+							elementObj.css2dObject.element.className = 'div';
+							changecolor(point);
+							cube[point].add(elementObj);
+						}
+					}
+				}
+			}
+
+			~ function() {
+				//model模型加载
+				
+				//model
+				var geometry = new THREE.BoxGeometry(1, 1, 1);
+				var material = new THREE.MeshLambertMaterial({
+					color: 0xff0000,
+					vertexColors: THREE.FaceColors,
+					//overdraw: 0.5
+				});
+				var mtlLoader = new THREE.MTLLoader();
+				mtlLoader.setPath('');
+				mtlLoader.load('i.mtl', function(materials) {
+					materials.preload();
+					var objLoader = new THREE.OBJLoader();
+					objLoader.setMaterials(materials);
+					objLoader.setPath('');
+					objLoader.load('i.obj', function(object) {
+						window.cube1 = object;
+						window.cube1.children[0].geometry.computeBoundingBox();
+						window.cube1.rotation.x = THREE.Math.degToRad(90);
+						window.cube1.children[0].geometry.center()
+						//window.cube.rotation.x = Math.PI*2
+						//window.cube.position.set(0, -500, 0);
+						//group.add(window.cube);
+						console.log(2);
+						//window.cube.castShadow = window.cube.receiveShadow = true;
+						scene1.add( window.cube1 );
+						window.cube1.visible = false;
+					}, onProgress, onError);
+				});
+				
+				var geometry = new THREE.BoxGeometry(1, 1, 1);
+				var material = new THREE.MeshLambertMaterial({
+					color: 0xff0000,
+					vertexColors: THREE.FaceColors,
+					//overdraw: 0.5
+				});
+				
+				var mtlLoader = new THREE.MTLLoader();
+				mtlLoader.setPath('');
+				mtlLoader.load('i.mtl', function(materials) {
+					materials.preload();
+					var objLoader = new THREE.OBJLoader();
+					objLoader.setMaterials(materials);
+					objLoader.setPath('');
+					objLoader.load('2.obj', function(object) {
+						window.cube2 = object;
+						window.cube2.children[0].geometry.computeBoundingBox();
+						window.cube2.rotation.x = THREE.Math.degToRad(90);
+						window.cube2.children[0].geometry.center()
+						//window.cube.rotation.x = Math.PI*2
+						//window.cube.position.set(0, -500, 0);
+						//group.add(window.cube);
+						console.log(2);
+						//window.cube.castShadow = window.cube.receiveShadow = true;
+						scene1.add( window.cube2 );
+						window.cube2.visible = false;
+					}, onProgress, onError);
+				});
+			
+			}()
+
+			// light 光源
+			~ function() {
+				var ambientLight = new THREE.AmbientLight(0x999999);
+				scene1.add(ambientLight);
+				light = new THREE.SpotLight(0xffffff); //, 1, 0
+				light.castShadow = true;
+				light.position.x = -200;
+				light.position.y = 300;
+				light.shadow.mapSize.width = 512; // default
+				light.shadow.mapSize.height = 512; // default
+				light.shadow.camera.near = 1; // default
+				light.shadow.camera.far = 10000; // default
+				light.shadow.bias = 0 // default
+				scene1.add(new THREE.PointLightHelper(light, 5))
+				scene1.add(light);
+			}()
+			//CSS2D渲染器
+			renderer3 = new THREE.CSS2DRenderer();
+			renderer3.setSize(window.innerWidth, window.innerHeight);
+			renderer3.domElement.style.position = 'absolute';
+			renderer3.domElement.style.top = 0;
+			document.querySelector('#box2').appendChild(renderer3.domElement);
+			//webGL高性能渲染器
+			renderer2 = new THREE.WebGLRenderer({
+				alpha: true,
+				antialias: true
+			});
+			renderer2.setClearColor(0x000000, 0);
+			renderer2.setPixelRatio(window.devicePixelRatio);
+			renderer2.setSize(window.innerWidth, window.innerHeight);
+			renderer2.shadowMap.enabled = true;//打开阴影渲染
+			renderer2.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
+			document.querySelector('#box').appendChild(renderer2.domElement);
+			//控制器
+			controls = new THREE.OrbitControls(camera1, renderer3.domElement);
+			//controls.noZoom = false;
+			//controls.noPan = false;
+			controls.enablePan = false;
+			controls.enableDamping = false;
+			controls.enableZoom = true;
+			//controls.minDistance = 150;
+			//controls.maxDistance = 150;
+		}
+
+		function onDocumentMouseMove(event) {
+			mouseX = event.clientX - windowHalfX;
+			mouseY = event.clientY - windowHalfY;
+		}
+		
+		function myanimate() {
+			for(let temp= 0; temp < cube.length; temp ++){				
+				cube[temp].rotation.y += 0.1;
+				if(cube[temp].rotation.y >= 6.32){
+					cube[temp].rotation.y = 0;
+				}
+			}
+			renderer2.render(scene1, camera1);
+			renderer3.render(scene1, camera1);
+			updateControls();
+			requestAnimationFrame(myanimate);
+		}
+		//创建DIV函数，不可删除，参数可改
+		function makeElementObject(type, width, height) {
+			//const color = new THREE.Color(1, 1, 1) //div背景颜色
+			const element = document.createElement(type);
+			const obj = new THREE.Object3D
+			//element.style.width = width + 'px';
+			element.style.height = height + 'px';
+			element.style.opacity = '1';
+			element.style.zIndex = '1';
+			element.style.color = '#FF0000';
+			var css2dObject = new THREE.CSS2DObject(element);
+			obj.css2dObject = css2dObject
+			obj.add(css2dObject)
+			// make an invisible plane for the DOM element to chop
+			// clip a WebGL geometry with it.
+			var material = new THREE.MeshPhongMaterial({
+				opacity: 0.15,
+				color: new THREE.Color(0x111111),
+				blending: THREE.NoBlending,
+				side: THREE.DoubleSide,
+			});
+			var geometry = new THREE.BoxGeometry(width, height, 1);
+			var mesh = new THREE.Mesh(geometry, material);
+			//mesh.castShadow = true;
+			//mesh.receiveShadow = true;
+			obj.lightShadowMesh = mesh
+			//obj.add(mesh);
+			return obj
+		}
+		function updateControls() {
+			controls.update();
+		}
+		
+		
+    //---------------------------------------------------------------------------------------------------------------
+	// 添加外部模型 END
+
+	//renderer the Whole thing on the page
+    //渲染场景到页面中
+    //渲染率查看器
+	var stats = new Stats();
+	document.body.appendChild( stats.dom );
+	// render the scene
+	onRenderFcts.push(function(){
+		// renderer.render( scene, camera );
+		stats.update();
+	})
+	
+
+	
+	//行程渲染事件环路
+    //run the rendering loop
+	var lastTimeMsec= null
+	requestAnimationFrame(function animate(nowMsec){
+		// keep looping
+		requestAnimationFrame( animate );
+		lastTimeMsec = lastTimeMsec || nowMsec-1000/60
+		var deltaMsec = Math.min(200, nowMsec - lastTimeMsec)
+		lastTimeMsec = nowMsec
+		// call each update function
+		onRenderFcts.forEach(function(onRenderFct){
+			onRenderFct(deltaMsec/1000, nowMsec/1000)
+		})
+	})
+
+	// visble = setInterval( function(){ hide() }, 1000);
+	
+	// function hide() {
+	// 	console.log(4);
+	// 	if( cube[0] ) {
+	// 		if( cube[0].visible ) {
+	// 			for(let temp = 0; temp <= cube.length; temp++) {
+	// 				cube[temp].visible = false;
+	// 				$(".div").hide();
+	// 				if(temp == 4) {
+	// 					break;
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// 	// $(".div").remove();
+	// }
+
+	// function show() {
+	// 	if( cube[0] ) {
+	// 		if( !cube[0].visible ) {
+	// 			for(let temp = 0; temp <= cube.length; temp++) {
+	// 				cube[temp].visible = true;
+	// 				$(".div").show();
+	// 				if(temp == 4) {
+	// 					break;
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
+	function check(point) {
+		if( point == 1){
+			window.cube1.visible = true;
+			window.cube2.visible = false;
+		} else if(point == 2) {
+			window.cube1.visible = false;
+			window.cube2.visible = true;
+		}
+	}
+	
+	window.onload = function(){
+		myinit ();
+		
+	}
+</script>
+</html>
